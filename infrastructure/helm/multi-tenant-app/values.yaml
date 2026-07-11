@@ -1,0 +1,67 @@
+global:
+  environment: "production"
+  awsRegion: "us-east-1"
+
+# Shared Security Context Baseline across all pods
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+
+containerSecurityContext:
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+# Component Definitions Matrix
+services:
+  gateway:
+    enabled: true
+    replicaCount: 3
+    image: "YOUR_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/secure-gateway:v1"
+    port: 3000
+    resources:
+      limits: { cpu: "500m", memory: "512Mi" }
+      requests: { cpu: "200m", memory: "256Mi" }
+      
+  backend:
+    enabled: true
+    replicaCount: 3
+    image: "YOUR_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/core-backend:v1"
+    port: 8000
+    resources:
+      limits: { cpu: "1000m", memory: "1Gi" }
+      requests: { cpu: "250m", memory: "512Mi" }
+
+  frontend:
+    enabled: true
+    replicaCount: 2
+    image: "YOUR_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/secure-frontend:v1"
+    port: 8080
+    resources:
+      limits: { cpu: "200m", memory: "256Mi" }
+      requests: { cpu: "100m", memory: "128Mi" }
+
+  analytics-api:
+    enabled: true
+    type: "web"
+    replicaCount: 2
+    image: "YOUR_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/analytics-worker:v1"
+    port: 5000
+    resources:
+      limits: { cpu: "500m", memory: "512Mi" }
+      requests: { cpu: "200m", memory: "256Mi" }
+
+  celery-worker:
+    enabled: true
+    type: "worker" # Identifies this as a headless architecture
+    replicaCount: 3
+    image: "YOUR_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/analytics-worker:v1"
+    # Overrides the default Gunicorn command baked into the Dockerfile
+    command: ["celery", "-A", "app.celery_app", "worker", "--loglevel=info"]
+    resources:
+      limits: { cpu: "1000m", memory: "1Gi" }
+      requests: { cpu: "500m", memory: "512Mi" }

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: multi-tenant-app
+description: Production-grade multi-tenant polyglot microservice grid
+type: application
+version: 1.0.0
+appVersion: "1.0.0"

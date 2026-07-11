@@ -1,0 +1,22 @@
+{{- range $serviceName, $serviceConfig := .Values.services }}
+{{- if and $serviceConfig.enabled (eq $serviceConfig.type "web") }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "multi-tenant-app.fullname" $ }}-{{ $serviceName }}
+  labels:
+    {{- include "multi-tenant-app.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $serviceName }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ $serviceConfig.port }}
+      targetPort: {{ $serviceConfig.port }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "multi-tenant-app.selectorLabels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $serviceName }}
+---
+{{- end }}
+{{- end }}

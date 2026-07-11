@@ -1,0 +1,37 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+env/
+.python-version
+
+# Django static and media
+staticfiles/
+media/
+
+# Local settings and secrets
+*.env
+*.local
+*.secret
+settings_local.py
+
+# Docker and build artifacts
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# IDE/editor files
+*.swp
+*~
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db

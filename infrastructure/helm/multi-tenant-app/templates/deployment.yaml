@@ -1,0 +1,76 @@
+{{- range $serviceName, $serviceConfig := .Values.services }}
+{{- if $serviceConfig.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "multi-tenant-app.fullname" $ }}-{{ $serviceName }}
+  labels:
+    {{- include "multi-tenant-app.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $serviceName }}
+spec:
+  replicas: {{ $serviceConfig.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "multi-tenant-app.selectorLabels" $ | nindent 6 }}
+      app.kubernetes.io/component: {{ $serviceName }}
+  template:
+    metadata:
+      labels:
+        {{- include "multi-tenant-app.selectorLabels" $ | nindent 8 }}
+        app.kubernetes.io/component: {{ $serviceName }}
+    spec:
+      securityContext:
+        {{- toYaml $.Values.securityContext | nindent 8 }}
+      containers:
+        - name: {{ $serviceName }}
+          image: "{{ $serviceConfig.image }}"
+          imagePullPolicy: IfNotPresent
+          
+          # Conditionally inject the entrypoint override array if specified
+          {{- if $serviceConfig.command }}
+          command:
+            {{- toYaml $serviceConfig.command | nindent 12 }}
+          {{- end }}
+
+          # Network Isolation Gate: Only map ports if the service handles web traffic
+          {{- if eq $serviceConfig.type "web" }}
+          ports:
+            - containerPort: {{ $serviceConfig.port }}
+              protocol: TCP
+          
+          # Add health checks for web pods so EKS can track liveness
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ $serviceConfig.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ $serviceConfig.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          {{- end }}
+
+          securityContext:
+            {{- toYaml $.Values.containerSecurityContext | nindent 12 }}
+          resources:
+            {{- toYaml $serviceConfig.resources | nindent 12 }}
+          volumeMounts:
+            - name: ephemeral-tmp
+              mountPath: /tmp
+          # ==========================================
+          # SECURE CONDITION: INJECT DB SECRETS ONLY TO BACKEND
+          # ==========================================
+          {{- if eq $serviceName "backend" }}
+          envFrom:
+            - secretRef:
+                name: django-db-secret # Dynamically maps all decrypted RDS keys as environment variables
+          {{- end }}
+      volumes:
+        - name: ephemeral-tmp
+          emptyDir: {}
+---
+{{- end }}
+{{- end }}

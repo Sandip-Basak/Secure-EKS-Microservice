@@ -1,0 +1,58 @@
+# ==========================================
+# 1. Isolation Baseline: Default-Deny All Namespace Traffic
+# ==========================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: {{ .Release.Namespace | default "default" }}
+spec:
+  podSelector: {} # Selects all pods in the entire namespace
+  policyTypes:
+    - Ingress
+    - Egress
+  # Empty rules mean absolute traffic blackhole across ingress and egress lines
+---
+# ==========================================
+# 2. Strict Whitelisting Path: Gateway Interception Rules
+# ==========================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-gateway-routing-policy
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: gateway # Targets our Node.js layer
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: frontend # Allows only frontend to route inbound
+      ports:
+        - protocol: TCP
+          port: 3000
+---
+# ==========================================
+# 3. Strict Whitelisting Path: Core Engine Isolation
+# ==========================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: core-backend-isolation-policy
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: backend # Targets our Django layer
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: gateway # Restricts inbound access strictly to Node Gateway
+      ports:
+        - protocol: TCP
+          port: 8000
