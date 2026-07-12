@@ -7,52 +7,135 @@ metadata:
   name: default-deny-all
   namespace: {{ .Release.Namespace | default "default" }}
 spec:
-  podSelector: {} # Selects all pods in the entire namespace
+  podSelector: {} # Targets every pod in the namespace
   policyTypes:
     - Ingress
     - Egress
-  # Empty rules mean absolute traffic blackhole across ingress and egress lines
 ---
 # ==========================================
-# 2. Strict Whitelisting Path: Gateway Interception Rules
+# 2. Frontend Layer: Serves Static Assets & Proxies API Calls
 # ==========================================
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: api-gateway-routing-policy
+  name: frontend-isolation-policy
+  namespace: {{ .Release.Namespace | default "default" }}
 spec:
   podSelector:
     matchLabels:
-      app.kubernetes.io/component: gateway # Targets our Node.js layer
+      app.kubernetes.io/component: frontend
   policyTypes:
     - Ingress
+    - Egress
   ingress:
+    # Allow the external AWS ALB Ingress Controller to deliver public user traffic
     - from:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    # Core Requirement: Allow Frontend Nginx to resolve Internal Cluster DNS
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow Frontend Nginx to reverse-proxy traffic down to the Node.js Gateway
+    - to:
         - podSelector:
             matchLabels:
-              app.kubernetes.io/component: frontend # Allows only frontend to route inbound
+              app.kubernetes.io/component: gateway
       ports:
         - protocol: TCP
           port: 3000
 ---
 # ==========================================
-# 3. Strict Whitelisting Path: Core Engine Isolation
+# 3. Gateway Layer: Handles Auth & Downstream Routing
+# ==========================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-gateway-routing-policy
+  namespace: {{ .Release.Namespace | default "default" }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: gateway
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: frontend
+      ports:
+        - protocol: TCP
+          port: 3000
+  egress:
+    # Allow Gateway to resolve Internal Cluster DNS
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow Gateway to route authenticated requests to the Django Backend
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: backend
+      ports:
+        - protocol: TCP
+          port: 8000
+---
+# ==========================================
+# 4. Core Logic Layer: Django Engine Locked to Gateway & DB
 # ==========================================
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: core-backend-isolation-policy
+  namespace: {{ .Release.Namespace | default "default" }}
 spec:
   podSelector:
     matchLabels:
-      app.kubernetes.io/component: backend # Targets our Django layer
+      app.kubernetes.io/component: backend
   policyTypes:
     - Ingress
+    - Egress
   ingress:
     - from:
         - podSelector:
             matchLabels:
-              app.kubernetes.io/component: gateway # Restricts inbound access strictly to Node Gateway
+              app.kubernetes.io/component: gateway
       ports:
         - protocol: TCP
           port: 8000
+  egress:
+    # Allow Django to resolve Internal Cluster DNS
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # FIXED: Allow Django to egress to the internal AWS VPC CIDR block for RDS & Redis
+    - to:
+        - ipBlock:
+            cidr: 10.0.0.0/16
