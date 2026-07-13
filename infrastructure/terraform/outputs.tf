@@ -47,3 +47,11 @@ output "secrets_manager_db_arn" {
   description = "The ARN of the AWS Secrets Manager entry tracking credentials"
   value       = aws_secretsmanager_secret.db_credentials.arn
 }
+
+# ==========================================
+# Output the ARN for the CI/CD GitOps Glue
+# ==========================================
+output "eso_iam_role_arn" {
+  description = "The ARN of the IAM Role for the External Secrets Operator ServiceAccount"
+  value       = aws_iam_role.eso_role.arn
+}

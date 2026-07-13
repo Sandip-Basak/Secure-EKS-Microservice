@@ -16,6 +16,10 @@ containerSecurityContext:
     drop:
       - ALL
 
+# GitOps Pipeline will dynamically override this value during deployment
+eso:
+  roleArn: ""
+
 # Component Definitions Matrix
 services:
   gateway:

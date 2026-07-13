@@ -139,3 +139,39 @@ spec:
     - to:
         - ipBlock:
             cidr: 10.0.0.0/16
+---
+# ==========================================
+# 5. Secrets Operator Security Policy: Unblock AWS API Communication
+# ==========================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: eso-egress-policy
+  namespace: {{ .Release.Namespace | default "default" }}
+spec:
+  podSelector:
+    matchLabels:
+      # Targets the explicit ServiceAccount context we just defined
+      app.kubernetes.io/name: external-secrets
+  policyTypes:
+    - Egress
+  egress:
+    # Secure Rule A: Allow Internal Cluster DNS resolution via CoreDNS
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Secure Rule B: Allow HTTPS egress out to AWS Secrets Manager Endpoint
+    # Since you configured NAT Gateways across all AZs, this routes safely via public IPs
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443
